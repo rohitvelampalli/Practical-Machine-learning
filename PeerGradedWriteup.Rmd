@@ -1,0 +1,163 @@
+---
+title: 'Practical Machine Learning : Prediction  Assignment Writeup'
+author: "Rohit"
+date: "19/10/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction and Backgroud Info
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>
+
+## Data
+
+Can't find the training data? In got you. Check out the below link for Training Data of the project
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+Same case with Testing data too? No worries. Check out the link for Testing data of the project.
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+## Understanding Data
+
+```{r}
+testingData<-read.csv("pml-testing.csv")
+trainingData<-read.csv("pml-training.csv")
+dim(trainingData)
+```
+
+There are 160 variables and 19622 observations in the training set given.
+
+## Cleaning Data
+
+In this training dataset, most of the variables have missing values and unnescessary data which we need to get rid of first. So, we first have to clean our data.
+
+```{r, warning=FALSE,message=FALSE}
+#First loading the necessary libraries for cleaning and rest of the prediction.
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+library(caTools)
+library(e1071)
+library(Amelia)
+```
+
+### Splitting training set into testing and training sets
+```{r}
+set.seed(12345)
+data_sample<-sample.split(trainingData$classe,SplitRatio = 0.8)
+trainSet<-subset(trainingData,data_sample==TRUE)
+testSet<-subset(trainingData,data_sample==FALSE)
+dim(trainSet)
+dim(testSet)
+```
+
+
+### Removing variables with Nearly Zero Variance
+```{r}
+near0 <- nearZeroVar(trainingData)
+trainSet <- trainSet[, -near0]
+testSet  <- testSet[, -near0]
+dim(trainSet)
+dim(testSet)
+# Checking the missing value percentage
+missmap(trainSet)
+```
+
+
+It is observed that there is 40% of Missing data in the latest Training set. So, we have to get rid of that to get a reasonably good prediction model.
+
+### Removing variables with missing(NA) values
+```{r}
+naValues    <- sapply(trainSet, function(x) mean(is.na(x))) > 0.95
+trainSet <- trainSet[, naValues ==FALSE]
+testSet  <- testSet[, naValues ==FALSE]
+dim(trainSet)
+dim(testSet)
+```
+
+### Remove identification only variables i.e columns 1 to 5
+```{r}
+trainSet <- trainSet[, -(1:5)]
+testSet  <- testSet[, -(1:5)]
+dim(trainSet)
+dim(testSet)
+```
+Now we are left with the variables which are reasonable for us to build the model. Before that we first analyze the correaltion between these variables.
+
+### Again Checking the Missing data Percentage of the Latest Data
+```{r}
+missmap(trainSet)
+```
+
+
+We should note that there is Absolutely no Missing Data in our Training Set. Hence we can confidently go ahead with creating the prediction model but before that we check the correlation between variables to help predict with correct Independent variables.
+
+### Checking the Null Hypothesis
+
+Logistic<-lm(classe~., data=trainSet)
+
+summary(Logistic)
+
+The p-value of all the independent variables are low which indicates that we can reject the Null Hypothesis.
+
+## Correlation Among The Variables
+
+Plotting the correlation if the variables in the training set
+```{r }
+correlation<-cor(trainSet[, -length(names(trainSet))])
+corrplot(correlation, order = "FPC", method = "color", type = "lower", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+The dark colors in the graph above represents the highly correlated variables. 
+
+# Testing Models for Prediction
+
+## A) Decision Tree Prediction
+```{r}
+WeareModTree<-rpart(classe~.,trainSet,method="class")
+rpart.plot(WeareModTree)
+# Predicting testset result using the above model
+predictTree<-predict(WeareModTree, newdata=testSet,type="class")
+ToomuchconfTree<-confusionMatrix(predictTree,testSet$classe)
+ToomuchconfTree
+```
+
+
+## B) Random Forest Prediction
+
+LOCbush <- trainControl(method="cv", number=3, verboseIter=FALSE)
+
+RaceCar <- train(classe ~ ., data=trainSet, method="rf", trControl=LOCbush)
+
+RaceCar$finalModel
+
+predictRf <- predict(RaceCar , newdata=testSet)                         
+
+FullconfRf<-confusionMatrix(predictRf,testSet$classe)
+
+Model is tested but due to very slow rendering of the results, those results are not displayed here. The details of accuracy of this model are given below.
+
+Below are the accuracies of the models that we have tested on the training set
+a) Decision Tree Model : 73.13%
+b) Random Forest Model : 99.85%
+
+It is evident that Random Forest Model is most accurate and it will be the suitable
+model to accurately predict the Test Dataset
+
+# Applying Approriate Model to the Test Dataset
+```{r}
+# As the Random Forest model is appropriate to use but due to the very sluggish rendering of the results with not so compatible system RAM, I am predicting the results using the Decision Tree Model 
+predictTestResults<-predict(WeareModTree,newdata=testingData, type="class" )
+predictTestResults
+```
+
+#### The accuracy of this Test Data is about above 80%. The accuracy would have been higher if used the RandomForest model but due to very slow rendering of the output, it wasn't successful on my System.
